@@ -2,8 +2,13 @@ name: GitHub Event Processor
 
 on:
   issues:
-    types: [opened]
+    types: [edited, labeled, opened, reopened, unlabeled]
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [closed, labeled, opened, reopened, review_requested, synchronize, unlabeled]
 
+# Permissões idênticas ao original, garantindo que o ID-TOKEN e ISSUES funcionem
 permissions:
   issues: write
   pull-requests: write
@@ -12,24 +17,23 @@ permissions:
 
 jobs:
   event-handler-with-azure:
-    name: Handle Event (Simulation)
+    name: Handle ${{ github.event_name }} ${{ github.event.action }} event (PoC Simulation)
     runs-on: ubuntu-latest
     steps:
-      # --- PASSO MOCK: Substitui o login da Microsoft que dá erro ---
+      # --- PASSO MOCK: Substitui o 'azure/login@v2' original para evitar o erro AADSTS700213 ---
       - name: 'Mock Azure Authentication'
         run: |
-          echo "Simulando ambiente autenticado..."
-          # Criamos variáveis fakes para a ferramenta não reclamar
-          echo "LABEL_SERVICE_API_KEY=mock-key-12345" >> $GITHUB_ENV
-          echo "APP_CONFIG_ENDPOINT=https://mock.azure.io" >> $GITHUB_ENV
+          echo "Simulando ambiente autenticado para execução fiel do script..."
+          echo "LABEL_SERVICE_API_KEY=mock-key-bypass-active" >> $GITHUB_ENV
+          echo "APP_CONFIG_ENDPOINT=https://mock-endpoint.azure.io" >> $GITHUB_ENV
           
-          # Criamos um binário 'az' falso
+          # Mock do binário AZ para os passos seguintes não falharem
           echo '#!/bin/bash' > az
-          echo 'exit 0' >> az
+          echo 'echo "Mocked AZ execution success"' >> az
           chmod +x az
           sudo mv az /usr/bin/az
 
-      # Instalação oficial da ferramenta da Microsoft
+      # Passo original de instalação da ferramenta .NET da Microsoft
       - name: Install GitHub Event Processor
         run: >
           dotnet tool install
@@ -39,10 +43,9 @@ jobs:
           --global
         shell: bash
 
-      # O PASSO ONDE O RCE ACONTECE
+      # Passo original de execução - Onde o corpo da Issue é processado
       - name: Process Action Event
         run: |
-          # A ferramenta lê o JSON da sua Issue aqui
           github-event-processor ${{ github.event_name }} ${{ github.event_path }}
         shell: bash
         env:
@@ -50,6 +53,22 @@ jobs:
           LABEL_SERVICE_API_KEY: ${{ env.LABEL_SERVICE_API_KEY }}
           APP_CONFIG_ENDPOINT: ${{ env.APP_CONFIG_ENDPOINT }}
 
+      # --- VERIFICAÇÃO DE RCE (Opcional, mas ajuda na prova para a MSRC) ---
+      - name: Check for Injection Evidence
+        if: always()
+        run: |
+          echo "Verificando se o comando da Issue criou arquivos no ambiente..."
+          if [ -f "RCE_CONFIRMED.txt" ]; then
+            echo "!!! VULNERABILIDADE CONFIRMADA !!!"
+            cat RCE_CONFIRMED.txt
+          elif [ -f "package.json" ]; then
+            echo "Arquivo package.json detectado. Verificando conteúdo para injeção..."
+            cat package.json
+          else
+            echo "Nenhum arquivo injetado detectado na raiz."
+          fi
+
+      # Passo original de arquivamento dos dados do evento
       - name: Archive github event data
         uses: actions/upload-artifact@v6
         if: always()
