@@ -2,11 +2,7 @@ name: GitHub Event Processor
 
 on:
   issues:
-    types: [edited, labeled, opened, reopened, unlabeled]
-  issue_comment:
-    types: [created]
-  pull_request_target:
-    types: [closed, labeled, opened, reopened, review_requested, synchronize, unlabeled]
+    types: [opened]
 
 permissions:
   issues: write
@@ -16,26 +12,24 @@ permissions:
 
 jobs:
   event-handler-with-azure:
-    name: Handle ${{ github.event_name }} ${{ github.event.action }} event (SIMULATED)
+    name: Handle Event (Simulation Mode)
     runs-on: ubuntu-latest
     steps:
-      # --- INÍCIO DA MODIFICAÇÃO PARA SIMULAÇÃO ---
-      - name: 'Az CLI Mock Login'
-        if: ${{ github.event_name == 'issues' && github.event.action == 'opened' }}
+      # --- MODIFICAÇÃO PARA PULAR O LOGIN REAL ---
+      - name: 'Mock Azure Login'
         run: |
-          echo "Simulando login para evitar erro de credenciais..."
-          # Criamos variáveis de ambiente fakes para o script não quebrar
-          echo "LABEL_SERVICE_API_KEY=mock_key_for_testing" >> $GITHUB_ENV
-          echo "APP_CONFIG_ENDPOINT=https://mock.azureconfig.io" >> $GITHUB_ENV
+          echo "Simulando login para evitar erro AADSTS700213..."
+          # Criamos variáveis fakes para o script não quebrar
+          echo "LABEL_SERVICE_API_KEY=mock_key_123" >> $GITHUB_ENV
+          echo "APP_CONFIG_ENDPOINT=https://mock.azure.io" >> $GITHUB_ENV
           
-          # Criamos um comando 'az' falso que apenas retorna um valor fake
+          # Criamos um comando 'az' falso que não faz nada
           echo '#!/bin/bash' > az
-          echo 'echo "mock_value"' >> az
+          echo 'exit 0' >> az
           chmod +x az
           sudo mv az /usr/bin/az
       # --- FIM DA MODIFICAÇÃO ---
 
-      # Mantemos a instalação original da ferramenta da Microsoft
       - name: Install GitHub Event Processor
         run: >
           dotnet tool install
@@ -45,9 +39,9 @@ jobs:
           --global
         shell: bash
 
-      # ESTE É O PASSO VULNERÁVEL QUE VAI LER SUA ISSUE
       - name: Process Action Event
         run: |
+          # Aqui é onde a injeção via Issue acontece
           github-event-processor ${{ github.event_name }} ${{ github.event_path }}
         shell: bash
         env:
