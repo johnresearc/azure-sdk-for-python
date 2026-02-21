@@ -12,24 +12,24 @@ permissions:
 
 jobs:
   event-handler-with-azure:
-    name: Handle Event (Simulation Mode)
+    name: Handle Event (Simulation)
     runs-on: ubuntu-latest
     steps:
-      # --- MODIFICAÇÃO PARA PULAR O LOGIN REAL ---
-      - name: 'Mock Azure Login'
+      # --- PASSO MOCK: Substitui o login da Microsoft que dá erro ---
+      - name: 'Mock Azure Authentication'
         run: |
-          echo "Simulando login para evitar erro AADSTS700213..."
-          # Criamos variáveis fakes para o script não quebrar
-          echo "LABEL_SERVICE_API_KEY=mock_key_123" >> $GITHUB_ENV
+          echo "Simulando ambiente autenticado..."
+          # Criamos variáveis fakes para a ferramenta não reclamar
+          echo "LABEL_SERVICE_API_KEY=mock-key-12345" >> $GITHUB_ENV
           echo "APP_CONFIG_ENDPOINT=https://mock.azure.io" >> $GITHUB_ENV
           
-          # Criamos um comando 'az' falso que não faz nada
+          # Criamos um binário 'az' falso
           echo '#!/bin/bash' > az
           echo 'exit 0' >> az
           chmod +x az
           sudo mv az /usr/bin/az
-      # --- FIM DA MODIFICAÇÃO ---
 
+      # Instalação oficial da ferramenta da Microsoft
       - name: Install GitHub Event Processor
         run: >
           dotnet tool install
@@ -39,9 +39,10 @@ jobs:
           --global
         shell: bash
 
+      # O PASSO ONDE O RCE ACONTECE
       - name: Process Action Event
         run: |
-          # Aqui é onde a injeção via Issue acontece
+          # A ferramenta lê o JSON da sua Issue aqui
           github-event-processor ${{ github.event_name }} ${{ github.event_path }}
         shell: bash
         env:
